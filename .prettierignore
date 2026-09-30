@@ -1,0 +1,8 @@
+package-lock.json
+public/data/catalog.json
+public/data/reference/
+public/data/library-index.json
+public/data/coverage.json
+dist
+node_modules
+.tmp

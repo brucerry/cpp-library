@@ -1,0 +1,26 @@
+{
+    "name": "cpp-library",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite --host 127.0.0.1",
+        "build": "vite build --base=./",
+        "prebuild": "node scripts/prune-reference.mjs",
+        "preview": "vite preview --host 127.0.0.1",
+        "sync": "node scripts/sync.mjs",
+        "test": "node --test tests/*.test.mjs",
+        "test:browser": "playwright test",
+        "pretest:browser": "npm run build",
+        "test:examples": "node scripts/check-examples.mjs",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.56.0",
+        "@wasm-fmt/clang-format": "^23.1.1",
+        "cheerio": "^1.2.0",
+        "prettier": "^3.6.2",
+        "vite": "^7.1.7"
+    }
+}
