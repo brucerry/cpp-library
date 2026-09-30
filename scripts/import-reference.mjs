@@ -515,8 +515,13 @@ const report = {
     excluded,
     exhaustiveSymbolAudit: false,
 };
+const previousManifest = JSON.parse(
+    await readFile("public/data/library-index.json", "utf8"),
+);
 const manifest = {
-    development: await fetchDevelopmentStatus(),
+    development: await fetchDevelopmentStatus({
+        previous: previousManifest.development,
+    }),
     schemaVersion: 2,
     syncedAt: report.generatedAt,
     archiveDate: release.tag_name.slice(1),
