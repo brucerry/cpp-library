@@ -1,5 +1,6 @@
 # CPP Library
 
+[![Update library and deploy Pages](https://github.com/brucerry/cpp-library/actions/workflows/pages.yml/badge.svg)](https://github.com/brucerry/cpp-library/actions/workflows/pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 We are building a library of C++ libraries. Welcome to join us as one of the librarians.
