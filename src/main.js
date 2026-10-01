@@ -4,7 +4,7 @@ import { installDetailTabs } from "./detail-tabs.js";
 import { installCursorParticles } from "./cursor-particles.js";
 import "./style.css";
 import { icon, escape, highlight } from "./ui.js";
-import { overviewContent } from "./header-overview.js";
+import { overviewContent, overviewTabs } from "./header-overview.js";
 import { headerCoverage } from "./header-coverage.js";
 import { functionLink } from "./routes.js";
 import { searchPlan, rankEntries } from "./search.js";
@@ -46,6 +46,10 @@ const formatNumber = (number) => number.toLocaleString("en-US");
 const edition = (value) => (value === "all" ? "All releases" : `C++${value}`);
 const routeLink = (version, library) =>
     `#/version/${version}${library ? `/library/${library}` : ""}`;
+function versionLink(version) {
+    const current = route();
+    return routeLink(version, current.library);
+}
 const main = () => document.querySelector("#main");
 function route() {
     const parts = (location.hash.slice(1) || "/").split("/").filter(Boolean);
@@ -69,6 +73,7 @@ function route() {
             type: "browse",
             version: parts[1],
             library: parts[2] === "library" ? parts[3] : null,
+            section: parts[4] || "definition",
         };
     return {
         type: parts.length ? "missing" : "browse",
@@ -190,7 +195,7 @@ function renderNav() {
         .map((version) => {
             const count = catalog ? librariesFor(version).length : undefined;
             const active = current.version === version;
-            return `<div class="nav-release"><a class="version-button ${active ? "active" : ""}" href="${routeLink(version)}" data-version="${version}" aria-expanded="${active && !collapsedVersions.has(version)}" ${active ? `aria-controls="libraries-${version}"` : ""} ${active ? 'aria-current="page"' : ""}><span class="version-mark">${version}</span><span>${edition(version)}</span><span class="count" title="${countDescription(version)}">${count ?? "—"}</span></a>${
+            return `<div class="nav-release"><a class="version-button ${active ? "active" : ""}" href="${versionLink(version)}" data-version="${version}" aria-expanded="${active && !collapsedVersions.has(version)}" ${active ? `aria-controls="libraries-${version}"` : ""} ${active ? 'aria-current="page"' : ""}><span class="version-mark">${version}</span><span>${edition(version)}</span><span class="count" title="${countDescription(version)}">${count ?? "—"}</span></a>${
                 active && catalog
                     ? `<div class="nav-libraries" id="libraries-${version}" ${collapsedVersions.has(version) ? "hidden" : ""}>${
                           librariesFor(version)
@@ -224,7 +229,7 @@ mobile.addEventListener("change", () => setMenu(false));
 setMenu(false);
 
 function controls(version) {
-    return `<div class="browse-controls"><label class="search-box">${icon("search")}<input id="search" type="search" autocomplete="off" placeholder="Search functions, types, or headers" aria-label="Search the library" value="${escape(query)}"><kbd>/</kbd></label>${modePicker(mode)}</div><nav class="filter-row" aria-label="Filter by released version">${["all", ...standards].map((value) => `<a class="filter-chip ${value === version ? "selected" : ""}" href="${routeLink(value)}" ${value === version ? 'aria-current="page"' : ""}>${edition(value)}</a>`).join("")}${developmentLinks()}</nav>`;
+    return `<div class="browse-controls"><label class="search-box">${icon("search")}<input id="search" type="search" autocomplete="off" placeholder="Search functions, types, or headers" aria-label="Search the library" value="${escape(query)}"><kbd>/</kbd></label>${modePicker(mode)}</div><nav class="filter-row" aria-label="Filter by released version">${["all", ...standards].map((value) => `<a class="filter-chip ${value === version ? "selected" : ""}" href="${versionLink(value)}" ${value === version ? 'aria-current="page"' : ""}>${edition(value)}</a>`).join("")}${developmentLinks()}</nav>`;
 }
 function browse(current) {
     const library = catalog.libraries.find(
@@ -255,6 +260,13 @@ function renderResults() {
     );
     const results = document.querySelector("#results");
     if (!results) return;
+    if (library && !inEdition(library, current.version, "available")) {
+        document.querySelector("#result-count").textContent =
+            "Header unavailable in this release";
+        document.querySelector("#scope-note").textContent = "";
+        results.innerHTML = `<div class="empty-state"><h3>&lt;${escape(library.header)}&gt; is unavailable in ${edition(current.version)}</h3><p>Select a release where this header is available.</p></div>`;
+        return;
+    }
     if (
         library &&
         !query.trim() &&
@@ -277,6 +289,32 @@ function renderResults() {
                     )
                         return;
                     results.innerHTML = `<article class="header-overview"><h3>${escape(coverage.label)}</h3>${overviewContent(data, current.version)}</article>`;
+                    overviewTabs(
+                        results.querySelector(".header-overview"),
+                        data,
+                        current,
+                        (label, section) => {
+                            document.title = `CPP Library - <${library.header}> - ${label}`;
+                            breadcrumbs([
+                                ...editionCrumbs(current.version),
+                                {
+                                    label: `<${library.header}>`,
+                                    href: routeLink(
+                                        current.version,
+                                        library.id,
+                                    ),
+                                },
+                                {
+                                    label,
+                                    href: `${routeLink(current.version, library.id)}/${section}`,
+                                },
+                            ]);
+                        },
+                    );
+                    if (current.section !== "definition")
+                        results
+                            .querySelector('[role="tab"][aria-selected="true"]')
+                            ?.focus({ preventScroll: true });
                 })
                 .catch(() => {
                     if (
@@ -442,7 +480,7 @@ async function detail(current, token) {
         examples.forEach((item, index) =>
             copyValues.set(`example-${index}`, item.code),
         );
-        main().innerHTML = `<article class="detail"><a class="back-link" href="${routeLink(current.version, lib.id)}">← Back to &lt;${escape(lib.header)}&gt;</a><div class="detail-badges"><span class="version-badge">Introduced in ${edition(entry.introduced)}</span>${(current.library ? [lib.header] : entry.headers).map((header) => `<code>&lt;${escape(header)}&gt;</code>`).join("")}${entry.removed ? `<span class="version-badge">Removed in ${edition(entry.removed)}</span>` : ""}</div><h1>${escape(data.name)}</h1>${guide ? `<p class="detail-summary">${escape(guide.summary)}</p><div class="plain-english">${icon("sun")}<div><h2>In everyday terms</h2><p>${escape(guide.analogy)}</p></div></div>` : ""}<nav class="page-toc" aria-label="On this page"><a href="#definition" data-section="definition">Definition</a><a href="#declarations" data-section="declarations">Declarations</a><a href="#examples" data-section="examples">Examples</a><a href="#source" data-section="source">Source</a></nav><section id="definition"><h2>What it does</h2><div class="definition-text">${paragraphs(data.intro || data.summary)}</div></section><section id="declarations"><h2>Definitions &amp; overloads</h2><p class="section-description">${current.version === "all" ? "Declaration history through C++23. Each overload keeps its version annotations." : `Showing overloads available in ${edition(current.version)}. Notes retain historical changes.`}</p>${declarations.length ? declarations.map((item, index) => codeBlock(item.code, `Overload ${index + 1} · ${edition(item.since)}${item.notes ? ` · ${item.notes}` : ""}`, `declaration-${index}`)).join("") : "<p>This function is not available in the selected edition.</p>"}</section>${data.sections.map((section, index) => `<details class="reference-section" ${/Parameters|Return value/.test(section.title) ? "open" : ""}><summary>${escape(section.title)}</summary><div class="section-content">${paragraphs(section.text)}</div></details>`).join("")}<section id="examples"><h2>Example use cases</h2>${examples.length ? examples.map((example, index) => `<div class="example"><h3>${escape(example.title || `Reference example ${index + 1}`)}</h3>${example.recommendation ? `<p class="example-hint related-example">${escape(example.recommendation.relationship)} · Demonstrates <a href="#/function/${escape(example.recommendation.id)}/all">${escape(example.recommendation.name)}</a>, not this exact API.</p>` : ""}${example.input ? `<div class="example-input"><span>INPUT</span><p>${escape(example.input)}</p></div>` : '<p class="example-hint">Input and setup are included below.</p>'}${codeBlock(example.code, `C++${example.minimumStandard || ""} example ${index + 1}`, `example-${index}`)}${example.output !== null ? `<div class="output-block"><div><span class="status-dot"></span>${escape(example.outputKind)}${example.unicodeEscaped ? " · Unicode escape notation" : ""}</div><pre tabindex="0">${escape(example.output)}</pre></div>` : '<p class="example-hint">No console output specified. See the assertions or side effects in the code.</p>'}<p class="example-hint">${example.curated ? "CPP Library example." : `cppreference contributors · <a href="${escape(example.recommendation?.source || data.source)}" target="_blank" rel="noreferrer">Source</a> · CC BY-SA 3.0.`}</p></div>`).join("") : `<div class="coverage-notice"><h3>Standalone example not supplied by the reference</h3><p>The definitions and requirements above are available. This page is recorded in the coverage report until a tested example has been added.</p><a href="#/coverage">See the example audit →</a></div>`}</section>${guide ? `<div class="good-to-know"><h3>Good to know</h3><p>${escape(guide.note)}</p></div>` : ""}<section class="source-section" id="source"><h2>Traceable reference</h2><p>Adapted from <a href="${escape(data.source)}" target="_blank" rel="noreferrer">${escape(data.name)} on cppreference ↗</a>, by cppreference contributors, under <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noreferrer">CC BY-SA 3.0</a>. Layout, navigation, whitespace, and Unicode display have been adapted.</p><p>Archive: ${escape(catalog.archiveDate)}. cppreference is a community reference, not an ISO publication. <a href="#/about">Source details and standard references →</a></p></section></article>`;
+        main().innerHTML = `<article class="detail"><a class="back-link" href="${routeLink(current.version, lib.id)}">← Back to &lt;${escape(lib.header)}&gt;</a><div class="detail-badges"><span class="version-badge">Introduced in ${edition(entry.introduced)}</span>${(current.library ? [lib.header] : entry.headers).map((header) => `<code>&lt;${escape(header)}&gt;</code>`).join("")}${entry.removed ? `<span class="version-badge">Removed in ${edition(entry.removed)}</span>` : ""}</div><h1>${escape(data.name)}</h1>${guide ? `<p class="detail-summary">${escape(guide.summary)}</p><div class="plain-english">${icon("sun")}<div><h2>In everyday terms</h2><p>${escape(guide.analogy)}</p></div></div>` : ""}<nav class="page-toc" aria-label="On this page"><a href="#definition" data-section="definition">Definition</a><a href="#declarations" data-section="declarations">Declarations</a><a href="#examples" data-section="examples">Examples</a><a href="#source" data-section="source">Source</a></nav><section id="definition"><h2>What it does</h2><div class="definition-text">${paragraphs(data.intro || data.summary)}</div></section><section id="declarations"><h2>Definitions &amp; overloads</h2><p class="section-description">${current.version === "all" ? "Declaration history through C++23. Each overload keeps its version annotations." : `Showing overloads available in ${edition(current.version)}. Notes retain historical changes.`}</p>${declarations.length ? declarations.map((item, index) => codeBlock(item.code, `Overload ${index + 1} · ${edition(item.since)}${item.notes ? ` · ${item.notes}` : ""}`, `declaration-${index}`)).join("") : "<p>This function is not available in the selected edition.</p>"}</section>${data.sections.map((section, index) => `<details class="reference-section" ${/Parameters|Return value/.test(section.title) ? "open" : ""}><summary>${escape(section.title)}</summary><div class="section-content">${paragraphs(section.text)}</div></details>`).join("")}<section id="examples"><h2>Example use cases</h2>${examples.length ? examples.map((example, index) => `<div class="example"><h3>${escape(example.title || `Reference example ${index + 1}`)}</h3>${example.recommendation ? `<p class="example-hint related-example">${escape(example.recommendation.relationship)} · Demonstrates <a href="#/function/${escape(example.recommendation.id)}/all">${escape(example.recommendation.name)}</a>, not this exact API.</p>` : ""}${example.input ? `<div class="example-input"><span>INPUT</span><p>${escape(example.input)}</p></div>` : '<p class="example-hint">Input and setup are included below.</p>'}${codeBlock(example.code, `C++${example.minimumStandard || ""} example ${index + 1}`, `example-${index}`)}${example.output ? `<div class="output-block"><div><span class="status-dot"></span>${escape(example.outputKind)}${example.unicodeEscaped ? " · Unicode escape notation" : ""}</div><pre tabindex="0">${escape(example.output)}</pre></div>` : '<p class="example-hint">No console output specified. See the assertions or side effects in the code.</p>'}<p class="example-hint">${example.curated ? "CPP Library example." : `cppreference contributors · <a href="${escape(example.recommendation?.source || data.source)}" target="_blank" rel="noreferrer">Source</a> · CC BY-SA 3.0.`}</p></div>`).join("") : `<div class="coverage-notice"><h3>Standalone example not supplied by the reference</h3><p>The definitions and requirements above are available. This page is recorded in the coverage report until a tested example has been added.</p><a href="#/coverage">See the example audit →</a></div>`}</section>${guide ? `<div class="good-to-know"><h3>Good to know</h3><p>${escape(guide.note)}</p></div>` : ""}<section class="source-section" id="source"><h2>Traceable reference</h2><p>Adapted from <a href="${escape(data.source)}" target="_blank" rel="noreferrer">${escape(data.name)} on cppreference ↗</a>, by cppreference contributors, under <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noreferrer">CC BY-SA 3.0</a>. Layout, navigation, whitespace, and Unicode display have been adapted.</p><p>Archive: ${escape(catalog.archiveDate)}. cppreference is a community reference, not an ISO publication. <a href="#/about">Source details and standard references →</a></p></section></article>`;
         const selected = installDetailTabs(
             document.querySelector(".detail"),
             { ...current, id: entry.id },

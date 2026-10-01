@@ -42,14 +42,26 @@ export function installDetailTabs(article, current, onTitle) {
             nodes: [article.querySelector("#source")],
         },
     );
-    const selected = tabs.find((tab) => tab.id === current.section) || tabs[0];
+    return installTabs(
+        article,
+        tabs,
+        current.section,
+        (section) =>
+            functionLink(current.id, current.version, current.library, section),
+        "Function sections",
+        onTitle,
+    );
+}
+
+export function installTabs(article, tabs, section, link, label, onTitle) {
+    const selected = tabs.find((tab) => tab.id === section) || tabs[0];
     const navigation = article.querySelector(".page-toc");
     navigation.setAttribute("role", "tablist");
-    navigation.setAttribute("aria-label", "Function sections");
+    navigation.setAttribute("aria-label", label);
     navigation.innerHTML = tabs
         .map(
             (tab) =>
-                `<a id="tab-${tab.id}" role="tab" tabindex="${tab === selected ? 0 : -1}" aria-selected="${tab === selected}" aria-controls="panel-${tab.id}" href="${functionLink(current.id, current.version, current.library, tab.id)}">${escape(tab.label)}</a>`,
+                `<a id="tab-${tab.id}" role="tab" tabindex="${tab === selected ? 0 : -1}" aria-selected="${tab === selected}" aria-controls="panel-${tab.id}" href="${link(tab.id)}">${escape(tab.label)}</a>`,
         )
         .join("");
     for (const tab of tabs) {

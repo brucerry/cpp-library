@@ -289,18 +289,16 @@ test("search is prominent and custom dropdown options have readable theme colors
     }
 });
 
-test("recommended examples are explicitly related and keep their own attribution", async ({
+test("previously missing examples demonstrate the API directly", async ({
     page,
 }) => {
-    const entry = index.entries.find((entry) => entry.hasRecommendation);
-    expect(entry).toBeTruthy();
-    await page.goto(`/#/function/${entry.id}/all`);
-    await page.getByRole("tab", { name: "Examples", exact: true }).click();
-    await expect(page.locator(".related-example")).toContainText(
-        "not this exact API",
-    );
+    const entry = entryFor("std::filesystem::path::clear");
+    await page.goto(`/#/function/${entry.id}/17/examples/library/filesystem`);
     await expect(page.locator("#examples .code-block")).toBeVisible();
+    await expect(page.locator("#examples")).toContainText("copy.clear()");
+    await expect(page.locator(".related-example")).toHaveCount(0);
     await expect(page.locator(".coverage-notice")).toHaveCount(0);
+    await expect(page.locator("#crumb")).toContainText("<filesystem>");
 });
 
 test("navigation titles, theme icons, layout preference, and development status", async ({
@@ -846,14 +844,14 @@ test("local header overviews display macros, types, constants, and remain readab
     page,
 }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    for (const [header, symbol] of [
-        ["climits", "CHAR_BIT"],
-        ["cstdint", "int32_t"],
-        ["numbers", "pi_v"],
-        ["stdfloat", "float32_t"],
-        ["version", "__cpp_lib_math_constants"],
+    for (const [header, symbol, section] of [
+        ["climits", "CHAR_BIT", "macros"],
+        ["cstdint", "int32_t", "definition"],
+        ["numbers", "pi_v", "constants"],
+        ["stdfloat", "float32_t", "definition"],
+        ["version", "__cpp_lib_math_constants", "library-features"],
     ]) {
-        await page.goto(`/#/version/23/library/${header}`);
+        await page.goto(`/#/version/23/library/${header}/${section}`);
         await expect(page.locator(".header-overview")).toContainText(symbol);
         await expect(page.locator(".overview-table").first()).toBeVisible();
         await expect(page.locator("#crumb")).toContainText(`<${header}>`);
@@ -864,8 +862,9 @@ test("local header overviews display macros, types, constants, and remain readab
         ).toBe(true);
     }
     await expect(page.locator(".overview-table")).not.toContainText("C++26");
-    await page.goto("/#/version/23/library/numbers");
+    await page.goto("/#/version/23/library/numbers/constants");
     await expect(page.locator(".header-overview")).toContainText("Euler");
+    await page.getByRole("tab", { name: "Synopsis", exact: true }).click();
     await expect(page.locator(".header-overview pre").first()).toBeVisible();
     await page.route("**/data/**", (route) => route.abort());
     await page.reload();
@@ -913,4 +912,71 @@ test("overview table rows respect the selected release", async ({ page }) => {
     await expect(page.locator(".overview-table")).toContainText(
         "basic_spanstream",
     );
+});
+
+test("header overview tabs have separate URLs, keyboard navigation, and history", async ({
+    page,
+}) => {
+    await page.goto("/#/version/23/library/climits/macros");
+    await expect(
+        page.getByRole("tab", { name: "Macros", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(
+        page.getByRole("tabpanel").filter({ visible: true }),
+    ).toHaveCount(1);
+    await expect(page.locator("#panel-macros")).toContainText("CHAR_BIT");
+    await expect(page.locator("#panel-synopsis")).toBeHidden();
+    await page.getByRole("tab", { name: "Macros", exact: true }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page).toHaveURL(/climits\/synopsis$/);
+    await expect(page.locator("#panel-synopsis")).toBeVisible();
+    await page.reload();
+    await expect(page.locator("#panel-synopsis")).toBeVisible();
+    await page.goBack();
+    await expect(page.locator("#panel-macros")).toBeVisible();
+    await page.getByRole("tab", { name: "Examples", exact: true }).click();
+    await expect(page.locator("#panel-examples")).toContainText(
+        "count < INT_MAX",
+    );
+    await expect(page.locator("#crumb")).toContainText("Examples");
+    await page.goto("/#/version/20/library/numbers/examples");
+    await expect(page.locator("#panel-examples")).toContainText(
+        "std::numbers::pi",
+    );
+    await expect(page.locator("#panel-constants")).toBeHidden();
+});
+
+test("version controls keep library scope through navigation, reload, and unavailable releases", async ({
+    page,
+}) => {
+    await page.goto("/#/version/98/library/cstdlib");
+    await page.locator('.version-button[data-version="11"]').click();
+    await expect(page).toHaveURL(/version\/11\/library\/cstdlib$/);
+    await expect(page.locator(".page-heading h1")).toHaveText("<cstdlib>");
+    await expect(page.locator("#crumb")).toContainText("C++11");
+    const addedFunction = entryFor("std::quick_exit");
+    await page.getByRole("searchbox").fill("quick_exit");
+    await expect(
+        page.locator(`.function-row[href*="${addedFunction.id}"]`),
+    ).toBeVisible();
+    await page
+        .getByRole("navigation", { name: "Filter by released version" })
+        .getByRole("link", { name: "C++98", exact: true })
+        .click();
+    await expect(page).toHaveURL(/version\/98\/library\/cstdlib$/);
+    await expect(
+        page.locator(`.function-row[href*="${addedFunction.id}"]`),
+    ).toHaveCount(0);
+    await page.reload();
+    await expect(page.locator("#crumb")).toContainText("<cstdlib>");
+    await page.goto("/#/version/20/library/numbers/constants");
+    await page.locator('.version-button[data-version="98"]').click();
+    await expect(page).toHaveURL(/version\/98\/library\/numbers$/);
+    await expect(page.locator(".empty-state")).toContainText(
+        "unavailable in C++98",
+    );
+    await page.locator('.version-button[data-version="20"]').click();
+    await expect(
+        page.getByRole("tab", { name: "Constants", exact: true }),
+    ).toBeVisible();
 });
