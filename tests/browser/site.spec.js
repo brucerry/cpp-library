@@ -792,3 +792,48 @@ test("mixed search terms rank API names before partial and related matches", asy
         "std::sort",
     );
 });
+
+test("available is the default and headers without indexed pages explain their facilities", async ({
+    page,
+}) => {
+    await page.goto("/#/version/23");
+    await expect(
+        page.getByRole("combobox", { name: "Version matching" }),
+    ).toHaveAttribute("data-value", "available");
+    await expect(page.locator(".library-card")).toHaveCount(134);
+    await expect(
+        page.locator(".card-bottom").filter({ hasText: /^0 reference pages/ }),
+    ).toHaveCount(0);
+    for (const [header, label] of [
+        ["climits", "Integer limit macros"],
+        ["cstdint", "Integer types & macros"],
+        ["numbers", "Mathematical constants"],
+        ["stdfloat", "Floating-point types"],
+        ["version", "Feature-test macros"],
+        ["iosfwd", "Forward declarations"],
+        ["limits.h", "Integer limit macros"],
+        ["iso646.h", "Empty compatibility header"],
+    ]) {
+        const library = index.libraries.find((item) => item.header === header);
+        const card = page.locator(
+            `.library-card[href$="/library/${library.id}"]`,
+        );
+        await expect(card.locator(".card-bottom")).toContainText(label);
+        await card.click();
+        await expect(page.locator(".header-overview h3")).toHaveText(label);
+        await expect(page.locator(".header-overview")).toContainText(
+            "Header availability and reference-page coverage are separate",
+        );
+        await expect(
+            page.locator(".header-overview a.primary-button"),
+        ).toHaveAttribute("href", library.source);
+        await expect(page.locator("#crumb")).toContainText(`<${header}>`);
+        await expect(page.locator("#reset-filters")).toHaveCount(0);
+        await page.locator(".page-heading .back-link").click();
+        await expect(page.locator(".library-card")).toHaveCount(134);
+    }
+    await page.reload();
+    await expect(
+        page.getByRole("combobox", { name: "Version matching" }),
+    ).toHaveAttribute("data-value", "available");
+});

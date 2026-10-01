@@ -4,6 +4,7 @@ import { installDetailTabs } from "./detail-tabs.js";
 import { installCursorParticles } from "./cursor-particles.js";
 import "./style.css";
 import { icon, escape, highlight } from "./ui.js";
+import { headerCoverage } from "./header-coverage.js";
 import { functionLink } from "./routes.js";
 import { searchPlan, rankEntries } from "./search.js";
 import {
@@ -240,7 +241,7 @@ function browse(current) {
               ]
             : []),
     ]);
-    main().innerHTML = `${current.version === "all" && !library ? "" : `<section class="page-heading"><a class="back-link" href="${library ? routeLink(current.version) : "#/"}">← ${library ? edition(current.version) + " libraries" : "All releases"}</a><h1>${library ? `&lt;${escape(library.header)}&gt;` : edition(current.version)}</h1><p>${library ? escape(library.summary) : current.version === "03" ? "Maintenance release. Available libraries include facilities from C++98." : ""}</p>${library ? `<div class="detail-badges"><span class="version-badge">Header introduced in ${edition(library.introduced)}</span>${library.removed ? `<span class="version-badge">Removed in ${edition(library.removed)}</span>` : ""}${library.aliasOf ? `<span>Compatibility header for &lt;${escape(library.aliasOf)}&gt;</span>` : ""}</div>` : ""}</section>`}<section class="explorer" aria-labelledby="explore-heading"><div class="section-title"><div><h2 id="explore-heading">${library ? "Functions &amp; types" : "Browse libraries"}</h2></div><div class="layout-toggle" role="group" aria-label="Library layout"><button data-layout="grid" aria-label="Grid layout" aria-pressed="${layout === "grid"}">${icon("grid")}</button><button data-layout="list" aria-label="List layout" aria-pressed="${layout === "list"}">${icon("list")}</button></div></div>${controls(current.version)}<div class="results-heading"><span id="result-count" aria-live="polite"></span><span id="scope-note"></span></div><div id="results"></div></section>`;
+    main().innerHTML = `${current.version === "all" && !library ? "" : `<section class="page-heading"><a class="back-link" href="${library ? routeLink(current.version) : "#/"}">← ${library ? edition(current.version) + " libraries" : "All releases"}</a><h1>${library ? `&lt;${escape(library.header)}&gt;` : edition(current.version)}</h1><p>${library ? escape(library.summary) : current.version === "03" ? "Maintenance release. Available libraries include facilities from C++98." : ""}</p>${library ? `<div class="detail-badges"><span class="version-badge">Header introduced in ${edition(library.introduced)}</span>${library.removed ? `<span class="version-badge">Removed in ${edition(library.removed)}</span>` : ""}${library.aliasOf ? `<span>Compatibility header for &lt;${escape(library.aliasOf)}&gt;</span>` : ""}</div>` : ""}</section>`}<section class="explorer" aria-labelledby="explore-heading"><div class="section-title"><div><h2 id="explore-heading">${library ? "Header facilities" : "Browse libraries"}</h2></div><div class="layout-toggle" role="group" aria-label="Library layout"><button data-layout="grid" aria-label="Grid layout" aria-pressed="${layout === "grid"}">${icon("grid")}</button><button data-layout="list" aria-label="List layout" aria-pressed="${layout === "list"}">${icon("list")}</button></div></div>${controls(current.version)}<div class="results-heading"><span id="result-count" aria-live="polite"></span><span id="scope-note"></span></div><div id="results"></div></section>`;
     renderResults();
 }
 function renderResults() {
@@ -250,6 +251,18 @@ function renderResults() {
     );
     const results = document.querySelector("#results");
     if (!results) return;
+    if (
+        library &&
+        !query.trim() &&
+        !libraryEntries(library, current.version, "available").length &&
+        inEdition(library, current.version, "available")
+    ) {
+        const coverage = headerCoverage(library);
+        document.querySelector("#result-count").textContent = coverage.label;
+        document.querySelector("#scope-note").textContent = "Header overview";
+        results.innerHTML = `<article class="coverage-notice header-overview"><h3>${escape(coverage.label)}</h3><p>${escape(coverage.explanation)}</p><p>Standalone reference pages indexed for this header: 0. Header availability and reference-page coverage are separate.</p><a class="primary-button" href="${escape(library.source)}" target="_blank" rel="noreferrer">Read &lt;${escape(library.header)}&gt; on cppreference ↗</a><p><a href="#/coverage">See the coverage audit →</a></p></article>`;
+        return;
+    }
     if (library || query.trim()) {
         const plan = searchPlan(
             query,
@@ -322,7 +335,7 @@ function renderResults() {
                                       item,
                                       group.version,
                                   ).length;
-                                  return `<a class="library-card" href="${routeLink(group.version, item.id)}"><div class="card-top"><span class="category-icon">${icon("book")}</span><span class="version-badge">${edition(item.introduced)}</span></div><h3>&lt;${escape(item.header)}&gt;</h3><p>${escape(item.summary)}</p><div class="card-bottom"><span>${count} reference ${count === 1 ? "page" : "pages"}</span>${icon("arrow")}</div></a>`;
+                                  return `<a class="library-card" href="${routeLink(group.version, item.id)}"><div class="card-top"><span class="category-icon">${icon("book")}</span><span class="version-badge">${edition(item.introduced)}</span></div><h3>&lt;${escape(item.header)}&gt;</h3><p>${escape(item.summary)}</p><div class="card-bottom"><span>${count ? `${count} reference ${count === 1 ? "page" : "pages"}` : mode === "introduced" && libraryEntries(item, group.version, "available").length ? "No new reference pages" : headerCoverage(item).label}</span>${icon("arrow")}</div></a>`;
                               })
                               .join("")}</div>`
                         : `<div class="edition-note">No new headers in C++03. <a href="${routeLink("03")}" data-available>Browse available libraries →</a></div>`
