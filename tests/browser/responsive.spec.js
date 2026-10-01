@@ -40,7 +40,7 @@ for (const [name, width, height] of screens) {
             await page
                 .locator('#versions > .nav-release > a[href="#/version/11"]')
                 .tap();
-            await expect(page.locator(".library-card")).toHaveCount(83);
+            await expect(page.locator(".library-card")).toHaveCount(105);
             if (width <= 820)
                 await expect(page.locator(".sidebar")).toHaveAttribute(
                     "inert",

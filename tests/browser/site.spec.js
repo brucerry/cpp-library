@@ -31,6 +31,7 @@ test("release to library to function navigation, search, copy, and version modes
     await expect(
         page.getByRole("heading", { name: "<vector>", exact: true }),
     ).toBeVisible();
+    await selectMode(page, "introduced");
     await expect(page.locator(".function-row")).toHaveCount(3);
     await selectMode(page, "available");
     await page.getByRole("searchbox").fill("push_back");
@@ -114,14 +115,18 @@ test("C++03 shows existing libraries without inventing new headers", async ({
     await expect(
         page.getByRole("heading", { name: "C++03", exact: true }).first(),
     ).toBeVisible();
-    await expect(page.locator(".library-card")).toHaveCount(0);
-    await selectMode(page, "available");
+    await expect(
+        page.getByRole("combobox", { name: "Version matching" }),
+    ).toHaveAttribute("data-value", "available");
+    await expect(page.locator(".library-card")).toHaveCount(69);
     await expect(
         page.locator('.library-card[href$="/library/vector"]'),
     ).toBeVisible();
     await expect(
         page.locator('.library-card[href$="/library/expected"]'),
     ).toHaveCount(0);
+    await selectMode(page, "introduced");
+    await expect(page.locator(".library-card")).toHaveCount(0);
 });
 test("mobile navigation, readable font sizes, keyboard, and themes", async ({
     page,
@@ -654,6 +659,8 @@ test("new and updated header counts are distinguished and GitHub highlights in e
     page,
 }) => {
     await page.goto("/#/version/11");
+    await expect(page.locator(".library-card").first()).toBeVisible();
+    await selectMode(page, "introduced");
     await expect(page.locator(".group-heading > span")).toHaveText(
         "83 libraries · 36 new + 47 updated",
     );
