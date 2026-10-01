@@ -1,3 +1,4 @@
+import { functionLink } from "./routes.js";
 import { escape } from "./ui.js";
 // Give existing source sections their own addressable panels without duplicating content.
 export function installDetailTabs(article, current, onTitle) {
@@ -48,7 +49,7 @@ export function installDetailTabs(article, current, onTitle) {
     navigation.innerHTML = tabs
         .map(
             (tab) =>
-                `<a id="tab-${tab.id}" role="tab" tabindex="${tab === selected ? 0 : -1}" aria-selected="${tab === selected}" aria-controls="panel-${tab.id}" href="#/function/${current.id}/${current.version}/${tab.id}">${escape(tab.label)}</a>`,
+                `<a id="tab-${tab.id}" role="tab" tabindex="${tab === selected ? 0 : -1}" aria-selected="${tab === selected}" aria-controls="panel-${tab.id}" href="${functionLink(current.id, current.version, current.library, tab.id)}">${escape(tab.label)}</a>`,
         )
         .join("");
     for (const tab of tabs) {

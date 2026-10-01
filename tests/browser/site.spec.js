@@ -696,3 +696,28 @@ test("new and updated header counts are distinguished and GitHub highlights in e
         ).toBe(highlight);
     }
 });
+
+test("shared function keeps its selected library across tabs, reload, and back navigation", async ({
+    page,
+}) => {
+    const shared = entryFor("std::begin, std::cbegin");
+    await page.goto("/#/version/11/library/vector");
+    await expect(page.locator(".function-row").first()).toBeVisible();
+    await page.getByRole("searchbox").fill("std::begin");
+    await page.locator(".function-row").click();
+    await expect(page.locator(".detail h1")).toHaveText(shared.name);
+    await expect(page.locator("#crumb")).toContainText("<vector>");
+    await expect(page.locator("#crumb")).not.toContainText("<array>");
+    await page.getByRole("tab", { name: "Declarations", exact: true }).click();
+    await expect(page).toHaveURL(/\/11\/declarations\/library\/vector$/);
+    await page.reload();
+    await expect(page.locator("#crumb")).toContainText("<vector>");
+    await expect(page.locator("#panel-declarations")).toContainText(
+        "decltype(c.begin())",
+    );
+    await expect(page.locator("#panel-declarations")).not.toContainText(
+        "constexpr auto cbegin",
+    );
+    await page.locator(".detail > .back-link").click();
+    await expect(page).toHaveURL(/\/version\/11\/library\/vector$/);
+});

@@ -4,6 +4,7 @@ import { installDetailTabs } from "./detail-tabs.js";
 import { installCursorParticles } from "./cursor-particles.js";
 import "./style.css";
 import { icon, escape, highlight } from "./ui.js";
+import { functionLink } from "./routes.js";
 import {
     CACHE_PREFIX,
     CACHE_KEY,
@@ -50,6 +51,7 @@ function route() {
             id: parts[1],
             version: parts[2] || "all",
             section: parts[3] || "definition",
+            library: parts[4] === "library" ? parts[5] : null,
         };
     if (parts[0] === "development")
         return { type: "development", version: parts[1] };
@@ -276,7 +278,7 @@ function renderResults() {
                   .slice((pageNumber - 1) * 36, pageNumber * 36)
                   .map(
                       (entry) =>
-                          `<a class="function-row" href="#/function/${entry.id}/${current.version}"><div><h3>${escape(entry.name)}</h3><p>${escape(entry.summary)}</p><div class="function-meta"><span>${edition(entry.introduced)}</span>${entry.headers
+                          `<a class="function-row" href="${functionLink(entry.id, current.version, current.library)}"><div><h3>${escape(entry.name)}</h3><p>${escape(entry.summary)}</p><div class="function-meta"><span>${edition(entry.introduced)}</span>${entry.headers
                               .slice(0, 3)
                               .map(
                                   (header) =>
@@ -348,16 +350,28 @@ async function detail(current, token) {
         catalog.entries.find((item) => item.id === current.id) ||
         catalog.entries.find((item) => item.name === legacy[current.id]);
     if (!entry) return missing();
+    const lib = current.library
+        ? catalog.libraries.find(
+              (item) =>
+                  item.id === current.library &&
+                  (entry.headers.includes(item.header) ||
+                      entry.headers.includes(item.aliasOf)),
+          )
+        : catalog.libraries.find((item) => item.header === entry.headers[0]);
+    if (!lib) return missing();
     main().innerHTML = `<div class="loading-state" role="status"><span class="loader"></span>Loading ${escape(entry.name)}…</div>`;
     document.title = `CPP Library - ${entry.name}`;
     try {
         const data = await fetchDetail(base, storage, entry);
         if (token !== renderToken) return;
         copyValues = new Map();
-        const lib = catalog.libraries.find(
-            (item) => item.header === entry.headers[0],
+        const guides = (data.guides || []).filter(
+            (item) =>
+                !item.header ||
+                item.header === lib.header ||
+                item.header === lib.aliasOf,
         );
-        const guide = data.guides?.[0];
+        const guide = guides[0];
         const declarations =
             current.version !== "all"
                 ? data.declarations.filter(
@@ -368,7 +382,7 @@ async function detail(current, token) {
                   )
                 : data.declarations;
         const examples = [
-            ...(data.guides || []).map((item) => ({
+            ...guides.map((item) => ({
                 code: item.example,
                 output: item.output,
                 title: item.summary,
@@ -386,7 +400,7 @@ async function detail(current, token) {
         examples.forEach((item, index) =>
             copyValues.set(`example-${index}`, item.code),
         );
-        main().innerHTML = `<article class="detail"><a class="back-link" href="${routeLink(current.version, lib.id)}">← Back to &lt;${escape(lib.header)}&gt;</a><div class="detail-badges"><span class="version-badge">Introduced in ${edition(entry.introduced)}</span>${entry.headers.map((header) => `<code>&lt;${escape(header)}&gt;</code>`).join("")}${entry.removed ? `<span class="version-badge">Removed in ${edition(entry.removed)}</span>` : ""}</div><h1>${escape(data.name)}</h1>${guide ? `<p class="detail-summary">${escape(guide.summary)}</p><div class="plain-english">${icon("sun")}<div><h2>In everyday terms</h2><p>${escape(guide.analogy)}</p></div></div>` : ""}<nav class="page-toc" aria-label="On this page"><a href="#definition" data-section="definition">Definition</a><a href="#declarations" data-section="declarations">Declarations</a><a href="#examples" data-section="examples">Examples</a><a href="#source" data-section="source">Source</a></nav><section id="definition"><h2>What it does</h2><div class="definition-text">${paragraphs(data.intro || data.summary)}</div></section><section id="declarations"><h2>Definitions &amp; overloads</h2><p class="section-description">${current.version === "all" ? "Declaration history through C++23. Each overload keeps its version annotations." : `Showing overloads available in ${edition(current.version)}. Notes retain historical changes.`}</p>${declarations.length ? declarations.map((item, index) => codeBlock(item.code, `Overload ${index + 1} · ${edition(item.since)}${item.notes ? ` · ${item.notes}` : ""}`, `declaration-${index}`)).join("") : "<p>This function is not available in the selected edition.</p>"}</section>${data.sections.map((section, index) => `<details class="reference-section" ${/Parameters|Return value/.test(section.title) ? "open" : ""}><summary>${escape(section.title)}</summary><div class="section-content">${paragraphs(section.text)}</div></details>`).join("")}<section id="examples"><h2>Example use cases</h2>${examples.length ? examples.map((example, index) => `<div class="example"><h3>${escape(example.title || `Reference example ${index + 1}`)}</h3>${example.recommendation ? `<p class="example-hint related-example">${escape(example.recommendation.relationship)} · Demonstrates <a href="#/function/${escape(example.recommendation.id)}/all">${escape(example.recommendation.name)}</a>, not this exact API.</p>` : ""}${example.input ? `<div class="example-input"><span>INPUT</span><p>${escape(example.input)}</p></div>` : '<p class="example-hint">Input and setup are included below.</p>'}${codeBlock(example.code, `C++${example.minimumStandard || ""} example ${index + 1}`, `example-${index}`)}${example.output !== null ? `<div class="output-block"><div><span class="status-dot"></span>${escape(example.outputKind)}${example.unicodeEscaped ? " · Unicode escape notation" : ""}</div><pre tabindex="0">${escape(example.output)}</pre></div>` : '<p class="example-hint">No console output specified. See the assertions or side effects in the code.</p>'}<p class="example-hint">${example.curated ? "CPP Library example." : `cppreference contributors · <a href="${escape(example.recommendation?.source || data.source)}" target="_blank" rel="noreferrer">Source</a> · CC BY-SA 3.0.`}</p></div>`).join("") : `<div class="coverage-notice"><h3>Standalone example not supplied by the reference</h3><p>The definitions and requirements above are available. This page is recorded in the coverage report until a tested example has been added.</p><a href="#/coverage">See the example audit →</a></div>`}</section>${guide ? `<div class="good-to-know"><h3>Good to know</h3><p>${escape(guide.note)}</p></div>` : ""}<section class="source-section" id="source"><h2>Traceable reference</h2><p>Adapted from <a href="${escape(data.source)}" target="_blank" rel="noreferrer">${escape(data.name)} on cppreference ↗</a>, by cppreference contributors, under <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noreferrer">CC BY-SA 3.0</a>. Layout, navigation, whitespace, and Unicode display have been adapted.</p><p>Archive: ${escape(catalog.archiveDate)}. cppreference is a community reference, not an ISO publication. <a href="#/about">Source details and standard references →</a></p></section></article>`;
+        main().innerHTML = `<article class="detail"><a class="back-link" href="${routeLink(current.version, lib.id)}">← Back to &lt;${escape(lib.header)}&gt;</a><div class="detail-badges"><span class="version-badge">Introduced in ${edition(entry.introduced)}</span>${(current.library ? [lib.header] : entry.headers).map((header) => `<code>&lt;${escape(header)}&gt;</code>`).join("")}${entry.removed ? `<span class="version-badge">Removed in ${edition(entry.removed)}</span>` : ""}</div><h1>${escape(data.name)}</h1>${guide ? `<p class="detail-summary">${escape(guide.summary)}</p><div class="plain-english">${icon("sun")}<div><h2>In everyday terms</h2><p>${escape(guide.analogy)}</p></div></div>` : ""}<nav class="page-toc" aria-label="On this page"><a href="#definition" data-section="definition">Definition</a><a href="#declarations" data-section="declarations">Declarations</a><a href="#examples" data-section="examples">Examples</a><a href="#source" data-section="source">Source</a></nav><section id="definition"><h2>What it does</h2><div class="definition-text">${paragraphs(data.intro || data.summary)}</div></section><section id="declarations"><h2>Definitions &amp; overloads</h2><p class="section-description">${current.version === "all" ? "Declaration history through C++23. Each overload keeps its version annotations." : `Showing overloads available in ${edition(current.version)}. Notes retain historical changes.`}</p>${declarations.length ? declarations.map((item, index) => codeBlock(item.code, `Overload ${index + 1} · ${edition(item.since)}${item.notes ? ` · ${item.notes}` : ""}`, `declaration-${index}`)).join("") : "<p>This function is not available in the selected edition.</p>"}</section>${data.sections.map((section, index) => `<details class="reference-section" ${/Parameters|Return value/.test(section.title) ? "open" : ""}><summary>${escape(section.title)}</summary><div class="section-content">${paragraphs(section.text)}</div></details>`).join("")}<section id="examples"><h2>Example use cases</h2>${examples.length ? examples.map((example, index) => `<div class="example"><h3>${escape(example.title || `Reference example ${index + 1}`)}</h3>${example.recommendation ? `<p class="example-hint related-example">${escape(example.recommendation.relationship)} · Demonstrates <a href="#/function/${escape(example.recommendation.id)}/all">${escape(example.recommendation.name)}</a>, not this exact API.</p>` : ""}${example.input ? `<div class="example-input"><span>INPUT</span><p>${escape(example.input)}</p></div>` : '<p class="example-hint">Input and setup are included below.</p>'}${codeBlock(example.code, `C++${example.minimumStandard || ""} example ${index + 1}`, `example-${index}`)}${example.output !== null ? `<div class="output-block"><div><span class="status-dot"></span>${escape(example.outputKind)}${example.unicodeEscaped ? " · Unicode escape notation" : ""}</div><pre tabindex="0">${escape(example.output)}</pre></div>` : '<p class="example-hint">No console output specified. See the assertions or side effects in the code.</p>'}<p class="example-hint">${example.curated ? "CPP Library example." : `cppreference contributors · <a href="${escape(example.recommendation?.source || data.source)}" target="_blank" rel="noreferrer">Source</a> · CC BY-SA 3.0.`}</p></div>`).join("") : `<div class="coverage-notice"><h3>Standalone example not supplied by the reference</h3><p>The definitions and requirements above are available. This page is recorded in the coverage report until a tested example has been added.</p><a href="#/coverage">See the example audit →</a></div>`}</section>${guide ? `<div class="good-to-know"><h3>Good to know</h3><p>${escape(guide.note)}</p></div>` : ""}<section class="source-section" id="source"><h2>Traceable reference</h2><p>Adapted from <a href="${escape(data.source)}" target="_blank" rel="noreferrer">${escape(data.name)} on cppreference ↗</a>, by cppreference contributors, under <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noreferrer">CC BY-SA 3.0</a>. Layout, navigation, whitespace, and Unicode display have been adapted.</p><p>Archive: ${escape(catalog.archiveDate)}. cppreference is a community reference, not an ISO publication. <a href="#/about">Source details and standard references →</a></p></section></article>`;
         const selected = installDetailTabs(
             document.querySelector(".detail"),
             { ...current, id: entry.id },
@@ -400,11 +414,20 @@ async function detail(current, token) {
                     },
                     {
                         label: entry.name,
-                        href: `#/function/${entry.id}/${current.version}`,
+                        href: functionLink(
+                            entry.id,
+                            current.version,
+                            current.library,
+                        ),
                     },
                     {
                         label,
-                        href: `#/function/${entry.id}/${current.version}/${section}`,
+                        href: functionLink(
+                            entry.id,
+                            current.version,
+                            current.library,
+                            section,
+                        ),
                     },
                 ]);
             },
