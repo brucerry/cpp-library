@@ -721,3 +721,67 @@ test("shared function keeps its selected library across tabs, reload, and back n
     await page.locator(".detail > .back-link").click();
     await expect(page).toHaveURL(/\/version\/11\/library\/vector$/);
 });
+
+test("header search scopes results for exact, partial, and typo queries", async ({
+    page,
+}) => {
+    await page.goto("/");
+    await expect(page.locator(".library-card").first()).toBeVisible();
+    for (const query of ["<vector>", "<vec", "<vecott", "vector"]) {
+        await page.getByRole("searchbox").fill(query);
+        await expect(page.locator(".header-suggestions a")).toHaveCount(1);
+        await expect(page.locator(".header-suggestions a")).toHaveText(
+            "<vector>",
+        );
+        const links = await page
+            .locator(".function-row")
+            .evaluateAll((rows) => rows.map((row) => row.getAttribute("href")));
+        expect(links.length).toBeGreaterThan(0);
+        expect(links.every((href) => href.endsWith("/library/vector"))).toBe(
+            true,
+        );
+    }
+    await page.locator(".header-suggestions a").click();
+    await expect(page.locator(".page-heading h1")).toHaveText("<vector>");
+    await expect(page.getByRole("searchbox")).toHaveValue("");
+});
+
+test("mixed search terms rank API names before partial and related matches", async ({
+    page,
+}) => {
+    await page.goto("/");
+    await expect(page.locator(".library-card").first()).toBeVisible();
+    for (const query of ["sort <algo", "<algo sort", "sort \\<algo"]) {
+        await page.getByRole("searchbox").fill(query);
+        await expect(page.locator(".function-row h3").first()).toHaveText(
+            "std::sort",
+        );
+        const links = await page
+            .locator(".function-row")
+            .evaluateAll((rows) => rows.map((row) => row.getAttribute("href")));
+        expect(links.every((href) => href.endsWith("/library/algorithm"))).toBe(
+            true,
+        );
+        const names = await page.locator(".function-row h3").allTextContents();
+        expect(names.indexOf("std::stable_sort")).toBeGreaterThan(
+            names.indexOf("std::sort"),
+        );
+    }
+    for (const query of ["<vec end", "end <vec", "<vecott end"]) {
+        await page.getByRole("searchbox").fill(query);
+        await expect(page.locator(".function-row h3").first()).toContainText(
+            "end",
+        );
+        const links = await page
+            .locator(".function-row")
+            .evaluateAll((rows) => rows.map((row) => row.getAttribute("href")));
+        expect(links.length).toBeGreaterThan(0);
+        expect(links.every((href) => href.endsWith("/library/vector"))).toBe(
+            true,
+        );
+    }
+    await page.getByRole("searchbox").fill("srot <algo");
+    await expect(page.locator(".function-row h3").first()).toHaveText(
+        "std::sort",
+    );
+});

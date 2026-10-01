@@ -5,6 +5,7 @@ import { installCursorParticles } from "./cursor-particles.js";
 import "./style.css";
 import { icon, escape, highlight } from "./ui.js";
 import { functionLink } from "./routes.js";
+import { searchPlan, rankEntries } from "./search.js";
 import {
     CACHE_PREFIX,
     CACHE_KEY,
@@ -242,17 +243,6 @@ function browse(current) {
     main().innerHTML = `${current.version === "all" && !library ? "" : `<section class="page-heading"><a class="back-link" href="${library ? routeLink(current.version) : "#/"}">← ${library ? edition(current.version) + " libraries" : "All releases"}</a><h1>${library ? `&lt;${escape(library.header)}&gt;` : edition(current.version)}</h1><p>${library ? escape(library.summary) : current.version === "03" ? "Maintenance release. Choose Available to browse existing libraries." : ""}</p>${library ? `<div class="detail-badges"><span class="version-badge">Header introduced in ${edition(library.introduced)}</span>${library.removed ? `<span class="version-badge">Removed in ${edition(library.removed)}</span>` : ""}${library.aliasOf ? `<span>Compatibility header for &lt;${escape(library.aliasOf)}&gt;</span>` : ""}</div>` : ""}</section>`}<section class="explorer" aria-labelledby="explore-heading"><div class="section-title"><div><h2 id="explore-heading">${library ? "Functions &amp; types" : "Browse libraries"}</h2></div><div class="layout-toggle" role="group" aria-label="Library layout"><button data-layout="grid" aria-label="Grid layout" aria-pressed="${layout === "grid"}">${icon("grid")}</button><button data-layout="list" aria-label="List layout" aria-pressed="${layout === "list"}">${icon("list")}</button></div></div>${controls(current.version)}<div class="results-heading"><span id="result-count" aria-live="polite"></span><span id="scope-note"></span></div><div id="results"></div></section>`;
     renderResults();
 }
-function matches(entry) {
-    return query
-        .toLowerCase()
-        .trim()
-        .split(/\s+/)
-        .every((word) =>
-            `${entry.name} ${entry.summary} ${entry.headers.join(" ")}`
-                .toLowerCase()
-                .includes(word),
-        );
-}
 function renderResults() {
     const current = route();
     const library = catalog.libraries.find(
@@ -261,37 +251,49 @@ function renderResults() {
     const results = document.querySelector("#results");
     if (!results) return;
     if (library || query.trim()) {
+        const plan = searchPlan(
+            query,
+            catalog.libraries.filter((item) =>
+                inEdition(item, current.version, "available"),
+            ),
+        );
+        const suggestions = plan.libraries.length
+            ? `<div class="header-suggestions"><p>${plan.approximate ? "Closest libraries" : "Matching libraries"}</p>${plan.libraries.map((item) => `<a class="filter-chip" data-available href="${routeLink(current.version, item.id)}">&lt;${escape(item.header)}&gt;</a>`).join("")}</div>`
+            : "";
         let entries = library
             ? libraryEntries(library, current.version)
             : catalog.entries.filter((entry) =>
                   inEdition(entry, current.version, mode),
               );
-        entries = entries.filter(matches);
+        entries = rankEntries(entries, plan);
         document.querySelector("#result-count").textContent =
             `${formatNumber(entries.length)} matching reference pages`;
-        document.querySelector("#scope-note").textContent =
-            "Related overloads share a page";
+        document.querySelector("#scope-note").textContent = query.trim()
+            ? "Exact → partial → typo suggestions → related"
+            : "Related overloads share a page";
         const pageCount = Math.max(1, Math.ceil(entries.length / 36));
         pageNumber = Math.min(pageNumber, pageCount);
-        results.innerHTML = entries.length
-            ? `<div class="function-list">${entries
-                  .slice((pageNumber - 1) * 36, pageNumber * 36)
-                  .map(
-                      (entry) =>
-                          `<a class="function-row" href="${functionLink(entry.id, current.version, current.library)}"><div><h3>${escape(entry.name)}</h3><p>${escape(entry.summary)}</p><div class="function-meta"><span>${edition(entry.introduced)}</span>${entry.headers
-                              .slice(0, 3)
-                              .map(
-                                  (header) =>
-                                      `<code>&lt;${escape(header)}&gt;</code>`,
-                              )
-                              .join(
-                                  "",
-                              )}${entry.hasGuide ? '<span class="guide-badge">Plain-English guide</span>' : ""}${entry.removed ? `<span>Removed in ${edition(entry.removed)}</span>` : ""}</div></div>${icon("arrow")}</a>`,
-                  )
-                  .join(
-                      "",
-                  )}</div>${pageCount > 1 ? `<div class="pagination"><button data-page="${pageNumber - 1}" ${pageNumber === 1 ? "disabled" : ""}>← Previous</button><span>Page ${pageNumber} of ${pageCount}</span><button data-page="${pageNumber + 1}" ${pageNumber === pageCount ? "disabled" : ""}>Next →</button></div>` : ""}`
-            : `<div class="empty-state">${icon("search")}<h3>${library && !query ? "No new reference entries in this edition" : "No matching functions"}</h3><p>${library && !query ? "Try “Available in this version” to see existing facilities. Some headers define only macros or forward declarations." : "Try a function name, a header, or a simpler search."}</p><button class="primary-button" id="reset-filters">${library && !query ? "Show available facilities" : "Clear search"}</button></div>`;
+        results.innerHTML =
+            suggestions +
+            (entries.length
+                ? `<div class="function-list">${entries
+                      .slice((pageNumber - 1) * 36, pageNumber * 36)
+                      .map(
+                          (entry) =>
+                              `<a class="function-row" href="${functionLink(entry.id, current.version, library?.id || plan.libraries.find((item) => entry.headers.includes(item.header) || entry.headers.includes(item.aliasOf))?.id)}"><div><h3>${escape(entry.name)}</h3><p>${escape(entry.summary)}</p><div class="function-meta"><span>${edition(entry.introduced)}</span>${entry.headers
+                                  .slice(0, 3)
+                                  .map(
+                                      (header) =>
+                                          `<code>&lt;${escape(header)}&gt;</code>`,
+                                  )
+                                  .join(
+                                      "",
+                                  )}${entry.hasGuide ? '<span class="guide-badge">Plain-English guide</span>' : ""}${entry.removed ? `<span>Removed in ${edition(entry.removed)}</span>` : ""}</div></div>${icon("arrow")}</a>`,
+                      )
+                      .join(
+                          "",
+                      )}</div>${pageCount > 1 ? `<div class="pagination"><button data-page="${pageNumber - 1}" ${pageNumber === 1 ? "disabled" : ""}>← Previous</button><span>Page ${pageNumber} of ${pageCount}</span><button data-page="${pageNumber + 1}" ${pageNumber === pageCount ? "disabled" : ""}>Next →</button></div>` : ""}`
+                : `<div class="empty-state">${icon("search")}<h3>${library && !query ? "No new reference entries in this edition" : "No matching functions"}</h3><p>${library && !query ? "Try “Available in this version” to see existing facilities. Some headers define only macros or forward declarations." : "Try a function name, a header, or a simpler search."}</p><button class="primary-button" id="reset-filters">${library && !query ? "Show available facilities" : "Clear search"}</button></div>`);
         return;
     }
     const libraries = librariesFor(current.version);
@@ -594,7 +596,10 @@ document.addEventListener("click", async (event) => {
         if (catalog) render();
         else await refresh();
     }
-    if (event.target.closest("[data-available]")) mode = "available";
+    if (event.target.closest("[data-available]")) {
+        mode = "available";
+        query = "";
+    }
     if (event.target.closest("#reset-filters")) {
         query = "";
         if (route().library) mode = "available";
