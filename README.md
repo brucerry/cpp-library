@@ -33,7 +33,7 @@ Before the first browser test, run `npx playwright install chromium webkit`. Set
 
 The importer reads all declaration pages from the latest [English cppreference archive](https://github.com/PeterFeicht/cppreference-doc/releases/latest), excluding draft-only and non-library pages. The navigation includes 139 historical and current headers and over 4,500 reference pages. Pages group related overloads; page counts are not function or overload counts. Header introductions, known removals, and declaration versions are preserved. “Available in this version” is the default filter; “New or updated” remains selectable. C++03 is available as a maintenance edition without inventing new headers.
 
-Headers with no indexed declaration pages stay visible with a facility label, an explanation, and a link to their reference overview. A zero count can mean a header contains only forward declarations or compatibility facilities, or that the importer skips the shared overview for macros, type aliases, or constants (for example `<climits>`, `<cstdint>`, `<numbers>`, `<stdfloat>`, and `<version>`). Header availability does not guarantee complete reference-page coverage.
+Headers with no standalone declaration pages display their imported macro, type, constant, forward-declaration, or compatibility overview inside the selected library. Overview tables, synopsis code, and explanations load on demand from content-hashed JSON and retain source attribution. The daily sync regenerates these alongside the function reference; feature-macro table rows exclude draft releases and follow the selected edition.
 
 `public/data/coverage.json` records the archive SHA-256, header audit, exclusions, unresolved classifications, and pages missing standalone examples. The header inventory is checked against [N4950, the public C++23 committee draft](https://github.com/cplusplus/draft/blob/n4950/source/lib-intro.tex). **Complete ISO symbol/overload coverage and an example for every function are not yet verified.** Every page includes direct code or a clearly labeled related standalone example from the same type, topic, or header. Related examples retain their own attribution and do not count as examples of the exact API; the audit reports these separately. Imported reference examples retain their published expected or possible output; they are not all compiler-tested locally.
 
@@ -43,7 +43,7 @@ Headers with no indexed declaration pages stay visible with a facility label, an
 
 ## Browser data
 
-Each visit fetches the published index. Refreshes reuse tab-scoped `sessionStorage` and revalidate; visible tabs also poll every 15 minutes and recheck on reconnection. Up to 24 visited detail pages are cached. Failed updates preserve the last good copy. Closing a tab normally clears its session data; same-tab external links clear this project's keys. Crashes, address-bar navigation, and browser session restoration prevent guaranteed cleanup for every departure. No service worker or localStorage cache is used.
+Each visit fetches the published index. Refreshes reuse tab-scoped `sessionStorage` and revalidate; visible tabs also poll every 15 minutes and recheck on reconnection. Up to 24 visited function pages and eight header overviews are cached. Failed updates preserve the last good copy. Closing a tab normally clears its session data; same-tab external links clear this project's keys. Crashes, address-bar navigation, and browser session restoration prevent guaranteed cleanup for every departure. No service worker or localStorage cache is used.
 
 ---
 

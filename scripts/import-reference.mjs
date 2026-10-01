@@ -1,3 +1,4 @@
+import { parseHeaderOverview } from "./header-overviews.mjs";
 import { fetchDevelopmentStatus } from "./development-status.mjs";
 import { load } from "cheerio";
 import { createHash } from "node:crypto";
@@ -494,6 +495,58 @@ for (const page of included) {
         hasRecommendation: !!page.recommendedExamples?.length,
     });
 }
+// Header synopsis and overview pages are a separate content kind. Keep them
+// available without fabricating function declarations or example coverage.
+const overviewRoot = `public/data/overviews/${release.tag_name}`;
+await mkdir(overviewRoot, { recursive: true });
+const compatibility = {
+    "stdalign.h": "cstdalign",
+    "stdbool.h": "cstdbool",
+    "iso646.h": "ciso646",
+};
+let overviewCount = 0;
+for (const library of libraries) {
+    if (
+        index.some(
+            (entry) =>
+                entry.headers.includes(library.header) ||
+                (library.aliasOf && entry.headers.includes(library.aliasOf)),
+        )
+    )
+        continue;
+    const canonical = pageFiles[`cpp/header/${library.header}.html`]
+        ? library.header
+        : library.aliasOf || compatibility[library.header];
+    if (!canonical || !pageFiles[`cpp/header/${canonical}.html`])
+        throw new Error(`Header overview missing: ${library.header}`);
+    const documents = [];
+    const addDocument = async (path, options = {}) => {
+        const document = parseHeaderOverview(await readPage(path), {
+            introduced: library.introduced,
+            ...options,
+        });
+        if (!document.blocks.length)
+            throw new Error(`Empty header overview: ${path}`);
+        documents.push({
+            ...document,
+            source: `https://en.cppreference.com/w/${path.slice(0, -5)}`,
+        });
+    };
+    await addDocument(`cpp/header/${canonical}.html`);
+    if (canonical === "numbers")
+        await addDocument("cpp/numeric/constants.html");
+    if (canonical === "version")
+        await addDocument("cpp/feature_test.html", {
+            section: "Library features",
+        });
+    const overview = { header: library.header, canonical, documents };
+    const content = JSON.stringify(overview);
+    const filename = `header-${library.id}-${hash(content)}.json`;
+    await writeFile(`${overviewRoot}/${filename}`, content + "\n");
+    library.overview = `overviews/${release.tag_name}/${filename}`;
+    overviewCount++;
+}
+
 const report = {
     archive: release.html_url,
     archiveSha256: archiveHash,
@@ -504,6 +557,7 @@ const report = {
     missingHeaders,
     libraries: libraries.length,
     importedPages: index.length,
+    headerOverviews: overviewCount,
     withExamples: index.filter((entry) => entry.hasExample).length,
     withRecommendations: index.filter((entry) => entry.hasRecommendation)
         .length,

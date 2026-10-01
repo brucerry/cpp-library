@@ -4,6 +4,7 @@ import { installDetailTabs } from "./detail-tabs.js";
 import { installCursorParticles } from "./cursor-particles.js";
 import "./style.css";
 import { icon, escape, highlight } from "./ui.js";
+import { overviewContent } from "./header-overview.js";
 import { headerCoverage } from "./header-coverage.js";
 import { functionLink } from "./routes.js";
 import { searchPlan, rankEntries } from "./search.js";
@@ -15,6 +16,7 @@ import {
     readCache,
     fetchIndex,
     fetchDetail,
+    fetchOverview,
     clearCache,
     inEdition,
 } from "./reference-data.js";
@@ -244,7 +246,9 @@ function browse(current) {
     main().innerHTML = `${current.version === "all" && !library ? "" : `<section class="page-heading"><a class="back-link" href="${library ? routeLink(current.version) : "#/"}">← ${library ? edition(current.version) + " libraries" : "All releases"}</a><h1>${library ? `&lt;${escape(library.header)}&gt;` : edition(current.version)}</h1><p>${library ? escape(library.summary) : current.version === "03" ? "Maintenance release. Available libraries include facilities from C++98." : ""}</p>${library ? `<div class="detail-badges"><span class="version-badge">Header introduced in ${edition(library.introduced)}</span>${library.removed ? `<span class="version-badge">Removed in ${edition(library.removed)}</span>` : ""}${library.aliasOf ? `<span>Compatibility header for &lt;${escape(library.aliasOf)}&gt;</span>` : ""}</div>` : ""}</section>`}<section class="explorer" aria-labelledby="explore-heading"><div class="section-title"><div><h2 id="explore-heading">${library ? "Header facilities" : "Browse libraries"}</h2></div><div class="layout-toggle" role="group" aria-label="Library layout"><button data-layout="grid" aria-label="Grid layout" aria-pressed="${layout === "grid"}">${icon("grid")}</button><button data-layout="list" aria-label="List layout" aria-pressed="${layout === "list"}">${icon("list")}</button></div></div>${controls(current.version)}<div class="results-heading"><span id="result-count" aria-live="polite"></span><span id="scope-note"></span></div><div id="results"></div></section>`;
     renderResults();
 }
+let overviewToken = 0;
 function renderResults() {
+    const token = ++overviewToken;
     const current = route();
     const library = catalog.libraries.find(
         (item) => item.id === current.library,
@@ -260,7 +264,30 @@ function renderResults() {
         const coverage = headerCoverage(library);
         document.querySelector("#result-count").textContent = coverage.label;
         document.querySelector("#scope-note").textContent = "Header overview";
-        results.innerHTML = `<article class="coverage-notice header-overview"><h3>${escape(coverage.label)}</h3><p>${escape(coverage.explanation)}</p><p>Standalone reference pages indexed for this header: 0. Header availability and reference-page coverage are separate.</p><a class="primary-button" href="${escape(library.source)}" target="_blank" rel="noreferrer">Read &lt;${escape(library.header)}&gt; on cppreference ↗</a><p><a href="#/coverage">See the coverage audit →</a></p></article>`;
+        if (!library.overview) {
+            results.innerHTML = `<article class="header-overview"><h3>${escape(coverage.label)}</h3><p>Refresh the reference index to load this header's overview.</p><button class="primary-button" data-refresh-index>Refresh index</button></article>`;
+        } else {
+            results.innerHTML =
+                '<div class="loading-state" role="status">Loading the header overview…</div>';
+            fetchOverview(base, storage, library)
+                .then((data) => {
+                    if (
+                        token !== overviewToken ||
+                        results !== document.querySelector("#results")
+                    )
+                        return;
+                    results.innerHTML = `<article class="header-overview"><h3>${escape(coverage.label)}</h3>${overviewContent(data, current.version)}</article>`;
+                })
+                .catch(() => {
+                    if (
+                        token !== overviewToken ||
+                        results !== document.querySelector("#results")
+                    )
+                        return;
+                    results.innerHTML =
+                        '<div class="empty-state"><h3>Header overview unavailable</h3><p>Reconnect and retry loading this overview.</p><button class="primary-button" id="retry-page">Retry overview</button></div>';
+                });
+        }
         return;
     }
     if (library || query.trim()) {
@@ -458,7 +485,7 @@ async function detail(current, token) {
 function about() {
     document.title = "CPP Library - Sources & attribution";
     breadcrumbs([{ label: "Sources & attribution", href: "#/about" }]);
-    main().innerHTML = `<article class="detail prose"><a class="back-link" href="#/">← Back to the library</a><div class="eyebrow">ABOUT THE REFERENCE</div><h1>Readable, traceable C++.</h1><p class="detail-summary">A library organized around the way you explore: version, header, function.</p><h2>Released standards</h2><p>The release filters cover C++98, C++03, C++11, C++14, C++17, C++20, and C++23. <a href="https://www.iso.org/standard/83626.html">ISO lists ISO/IEC 14882:2024 (C++23) as the published standard</a>. Draft-only facilities are excluded from the released index. C++03 is a maintenance release; its available libraries remain browsable.</p><h2>What the filters mean</h2><p><strong>New or updated</strong> shows headers with new facilities in the selected edition. Counts combine new headers and existing headers with additions; updated headers are already part of the earlier inventory. For example, the C++11 catalog has 36 new headers and 47 updated headers: 83 affected headers, while 69 earlier headers + 36 new headers = 105 available headers. <strong>Available</strong> is the default and includes earlier facilities and excludes known removals. The header badge gives the header’s own introduction version. Reference pages group related overloads and may discuss historical differences.</p><h2>Sources and attribution</h2><p>Reference declarations, descriptions, and examples are adapted from the English cppreference archive by cppreference contributors. They remain licensed under <a href="https://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution-ShareAlike 3.0 Unported</a>. Each page links to its original. The importer changes layout, extracts text, normalizes whitespace, and escapes CJK characters for English-only display. The <a href="${escape(catalog.release)}">archive release</a> is a community publication and is not the ISO standard.</p><p>The header inventory is checked against <a href="https://github.com/cplusplus/draft/blob/n4950/source/lib-intro.tex">N4950, the public C++23 committee draft</a>. These checks validate header coverage; they do not prove that every standard overload has a complete guide. The <a href="#/coverage">coverage report</a> makes remaining gaps visible.</p><h2>Fresh data without a heavy first load</h2><p>A daily GitHub Actions job checks for the latest archive and rebuilds the index. Browsers fetch that published index on opening, revalidate on refresh, and poll every 15 minutes while visible. Function pages load on demand. Failed updates retain the last good index.</p><p>The index and up to 24 visited function pages use tab-scoped sessionStorage. Closing the tab normally clears this data. Same-tab external links clear this site’s keys. Browser crashes, address-bar departures, and restored sessions prevent an absolute cleanup guarantee. No service worker or localStorage cache is installed.</p><h2>Project licenses</h2><p>Original application code and original guides use MIT. Adapted cppreference material retains CC BY-SA 3.0. DM Sans and Manrope are bundled under the SIL Open Font License. The project is independent and is not endorsed by ISO or cppreference.</p></article>`;
+    main().innerHTML = `<article class="detail prose"><a class="back-link" href="#/">← Back to the library</a><div class="eyebrow">ABOUT THE REFERENCE</div><h1>Readable, traceable C++.</h1><p class="detail-summary">A library organized around the way you explore: version, header, function.</p><h2>Released standards</h2><p>The release filters cover C++98, C++03, C++11, C++14, C++17, C++20, and C++23. <a href="https://www.iso.org/standard/83626.html">ISO lists ISO/IEC 14882:2024 (C++23) as the published standard</a>. Draft-only facilities are excluded from the released index. C++03 is a maintenance release; its available libraries remain browsable.</p><h2>What the filters mean</h2><p><strong>New or updated</strong> shows headers with new facilities in the selected edition. Counts combine new headers and existing headers with additions; updated headers are already part of the earlier inventory. For example, the C++11 catalog has 36 new headers and 47 updated headers: 83 affected headers, while 69 earlier headers + 36 new headers = 105 available headers. <strong>Available</strong> is the default and includes earlier facilities and excludes known removals. The header badge gives the header’s own introduction version. Reference pages group related overloads and may discuss historical differences.</p><h2>Sources and attribution</h2><p>Reference declarations, descriptions, and examples are adapted from the English cppreference archive by cppreference contributors. They remain licensed under <a href="https://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution-ShareAlike 3.0 Unported</a>. Each page links to its original. The importer changes layout, extracts text, normalizes whitespace, and escapes CJK characters for English-only display. The <a href="${escape(catalog.release)}">archive release</a> is a community publication and is not the ISO standard.</p><p>The header inventory is checked against <a href="https://github.com/cplusplus/draft/blob/n4950/source/lib-intro.tex">N4950, the public C++23 committee draft</a>. These checks validate header coverage; they do not prove that every standard overload has a complete guide. The <a href="#/coverage">coverage report</a> makes remaining gaps visible.</p><h2>Fresh data without a heavy first load</h2><p>A daily GitHub Actions job checks for the latest archive and rebuilds the index. Browsers fetch that published index on opening, revalidate on refresh, and poll every 15 minutes while visible. Function pages and header overviews load on demand. Failed updates retain the last good index.</p><p>The index, up to 24 visited function pages, and eight header overviews use tab-scoped sessionStorage. Closing the tab normally clears this data. Same-tab external links clear this site’s keys. Browser crashes, address-bar departures, and restored sessions prevent an absolute cleanup guarantee. No service worker or localStorage cache is installed.</p><h2>Project licenses</h2><p>Original application code and original guides use MIT. Adapted cppreference material retains CC BY-SA 3.0. DM Sans and Manrope are bundled under the SIL Open Font License. The project is independent and is not endorsed by ISO or cppreference.</p></article>`;
 }
 async function coverage(token) {
     document.title = "CPP Library - Coverage";
@@ -472,7 +499,7 @@ async function coverage(token) {
         if (!response.ok) throw new Error("Unavailable");
         const report = await response.json();
         if (token !== renderToken) return;
-        main().innerHTML = `<article class="detail prose"><a class="back-link" href="#/">← Back to the library</a><div class="eyebrow">CONTENT COVERAGE</div><h1>A reference you can inspect.</h1><p class="detail-summary">Coverage is measured against the imported archive and the released standard’s header inventory.</p><div class="stats-grid"><div><strong>${report.libraries}</strong><span>historical &amp; current headers</span></div><div><strong>${formatNumber(report.importedPages)}</strong><span>reference pages</span></div><div><strong>${formatNumber(report.withExamples)}</strong><span>pages with direct examples</span></div></div><h2>Header audit</h2><p>${report.officialHeaders} header names checked against the public C++23 draft. ${report.missingHeaders.length} missing from the header navigation.</p><h2>Completeness status</h2><p>Every imported page has declarations and a source link. ${report.withRecommendations || 0} pages offer a related example; ${report.missingExamples.length} still need an example of the exact API. ${report.withoutAnyExample?.length ?? report.missingExamples.length} pages have neither. ${report.unclassified.length} declaration pages need a verified header classification. An exhaustive symbol-by-symbol and overload-by-overload ISO audit has not yet been completed. These gaps prevent a claim of complete standard-library coverage.</p><p><a href="${base}data/coverage.json" target="_blank" rel="noreferrer">Download the full machine-readable audit ↗</a></p><h2>Exact API examples still needed</h2><div class="audit-list">${report.missingExamples
+        main().innerHTML = `<article class="detail prose"><a class="back-link" href="#/">← Back to the library</a><div class="eyebrow">CONTENT COVERAGE</div><h1>A reference you can inspect.</h1><p class="detail-summary">Coverage is measured against the imported archive and the released standard’s header inventory.</p><div class="stats-grid"><div><strong>${report.libraries}</strong><span>historical &amp; current headers</span></div><div><strong>${formatNumber(report.importedPages)}</strong><span>reference pages</span></div><div><strong>${formatNumber(report.withExamples)}</strong><span>pages with direct examples</span></div></div><h2>Header audit</h2><p>${report.officialHeaders} header names checked against the public C++23 draft. ${report.missingHeaders.length} missing from the header navigation.</p><h2>Completeness status</h2><p>Every imported function page has declarations and a source link. ${report.headerOverviews || 0} header overviews provide macro, type, constant, forward-declaration, and compatibility details inside the library pages. ${report.withRecommendations || 0} pages offer a related example; ${report.missingExamples.length} still need an example of the exact API. ${report.withoutAnyExample?.length ?? report.missingExamples.length} pages have neither. ${report.unclassified.length} declaration pages need a verified header classification. An exhaustive symbol-by-symbol and overload-by-overload ISO audit has not yet been completed. These gaps prevent a claim of complete standard-library coverage.</p><p><a href="${base}data/coverage.json" target="_blank" rel="noreferrer">Download the full machine-readable audit ↗</a></p><h2>Exact API examples still needed</h2><div class="audit-list">${report.missingExamples
             .slice(0, 100)
             .map(
                 (item) =>
@@ -604,7 +631,8 @@ document.addEventListener("click", async (event) => {
     }
     if (event.target.closest(".mobile-menu"))
         setMenu(!document.querySelector(".sidebar").classList.contains("open"));
-    if (event.target.closest("#refresh-data")) await refresh();
+    if (event.target.closest("#refresh-data, [data-refresh-index]"))
+        await refresh();
     if (event.target.closest("#retry-page")) {
         if (catalog) render();
         else await refresh();

@@ -823,13 +823,14 @@ test("available is the default and headers without indexed pages explain their f
         );
         await expect(card.locator(".card-bottom")).toContainText(label);
         await card.click();
-        await expect(page.locator(".header-overview h3")).toHaveText(label);
-        await expect(page.locator(".header-overview")).toContainText(
-            "Header availability and reference-page coverage are separate",
-        );
+        await expect(page.locator(".header-overview > h3")).toHaveText(label);
+        await expect(page.locator(".overview-document").first()).toBeVisible();
         await expect(
             page.locator(".header-overview a.primary-button"),
-        ).toHaveAttribute("href", library.source);
+        ).toHaveCount(0);
+        await expect(page.locator(".header-overview")).toContainText(
+            "CC BY-SA 3.0",
+        );
         await expect(page.locator("#crumb")).toContainText(`<${header}>`);
         await expect(page.locator("#reset-filters")).toHaveCount(0);
         await page.locator(".page-heading .back-link").click();
@@ -839,4 +840,77 @@ test("available is the default and headers without indexed pages explain their f
     await expect(
         page.getByRole("combobox", { name: "Version matching" }),
     ).toHaveAttribute("data-value", "available");
+});
+
+test("local header overviews display macros, types, constants, and remain readable offline", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const [header, symbol] of [
+        ["climits", "CHAR_BIT"],
+        ["cstdint", "int32_t"],
+        ["numbers", "pi_v"],
+        ["stdfloat", "float32_t"],
+        ["version", "__cpp_lib_math_constants"],
+    ]) {
+        await page.goto(`/#/version/23/library/${header}`);
+        await expect(page.locator(".header-overview")).toContainText(symbol);
+        await expect(page.locator(".overview-table").first()).toBeVisible();
+        await expect(page.locator("#crumb")).toContainText(`<${header}>`);
+        expect(
+            await page.evaluate(
+                () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+        ).toBe(true);
+    }
+    await expect(page.locator(".overview-table")).not.toContainText("C++26");
+    await page.goto("/#/version/23/library/numbers");
+    await expect(page.locator(".header-overview")).toContainText("Euler");
+    await expect(page.locator(".header-overview pre").first()).toBeVisible();
+    await page.route("**/data/**", (route) => route.abort());
+    await page.reload();
+    await expect(page.locator(".header-overview")).toContainText("pi_v");
+    await expect(page.locator("#sync-label")).toContainText("saved copy");
+});
+
+test("available is the first option and a failed overview load can be retried", async ({
+    page,
+}) => {
+    await page.route("**/data/overviews/**", (route) => route.abort());
+    await page.goto("/#/version/23/library/climits");
+    await expect(
+        page.getByRole("heading", { name: "Header overview unavailable" }),
+    ).toBeVisible();
+    await page.unroute("**/data/overviews/**");
+    await page.getByRole("button", { name: "Retry overview" }).click();
+    await expect(page.locator(".header-overview")).toContainText("CHAR_BIT");
+    await page.getByRole("combobox", { name: "Version matching" }).click();
+    await expect(
+        page.locator("#mode-options [role=option]").first(),
+    ).toHaveText("Available in this version");
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#edition-mode")).toHaveAttribute(
+        "data-value",
+        "introduced",
+    );
+    await page.locator("#edition-mode").click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#edition-mode")).toHaveAttribute(
+        "data-value",
+        "available",
+    );
+});
+
+test("overview table rows respect the selected release", async ({ page }) => {
+    await page.goto("/#/version/11/library/iosfwd");
+    await expect(page.locator(".overview-table").first()).toBeVisible();
+    await expect(page.locator(".overview-table")).not.toContainText(
+        "basic_spanstream",
+    );
+    await page.goto("/#/version/23/library/iosfwd");
+    await expect(page.locator(".overview-table")).toContainText(
+        "basic_spanstream",
+    );
 });

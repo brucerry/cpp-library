@@ -26,7 +26,11 @@ export function validIndex(data) {
             (library) =>
                 /^[a-z0-9_.]+$/.test(library.header) &&
                 /^[a-z0-9_-]+$/.test(library.id) &&
-                standards.includes(library.introduced),
+                standards.includes(library.introduced) &&
+                (library.overview === undefined ||
+                    /^overviews\/v\d+\/header-[a-z0-9_-]+-[a-f0-9]{16}\.json$/.test(
+                        library.overview,
+                    )),
         ) &&
         Array.isArray(data.entries) &&
         data.entries.length > 0 &&
@@ -169,4 +173,72 @@ export function inEdition(entry, selected, mode = "introduced") {
         year(entry.introduced) <= year(selected) &&
         (!entry.removed || year(entry.removed) > year(selected))
     );
+}
+
+export function validOverview(data, library) {
+    return (
+        data?.header === library.header &&
+        typeof data.canonical === "string" &&
+        Array.isArray(data.documents) &&
+        data.documents.length > 0 &&
+        data.documents.every(
+            (document) =>
+                typeof document.title === "string" &&
+                /^https:\/\/en\.cppreference\.com\/w\/cpp\//.test(
+                    document.source,
+                ) &&
+                Array.isArray(document.blocks) &&
+                document.blocks.length > 0 &&
+                document.blocks.every((block) =>
+                    block.type === "table"
+                        ? Array.isArray(block.rows) &&
+                          block.rows.every(
+                              (row) =>
+                                  standards.includes(row.since) &&
+                                  Array.isArray(row.cells) &&
+                                  row.cells.length > 0 &&
+                                  row.cells.every(
+                                      (cell) =>
+                                          typeof cell.text === "string" &&
+                                          typeof cell.heading === "boolean",
+                                  ),
+                          )
+                        : ["heading", "paragraph", "code"].includes(
+                              block.type,
+                          ) && typeof block.text === "string",
+                ),
+        )
+    );
+}
+
+export async function fetchOverview(base, storage, library) {
+    if (
+        !/^overviews\/v\d+\/header-[a-z0-9_-]+-[a-f0-9]{16}\.json$/.test(
+            library.overview,
+        )
+    )
+        throw new Error("Invalid header overview path");
+    const key = `${CACHE_PREFIX}${library.overview}`;
+    try {
+        const saved = JSON.parse(storage.getItem(key));
+        if (validOverview(saved, library)) return saved;
+    } catch {
+        /* Fetch when the saved copy is unavailable. */
+    }
+    const data = await getJson(`${base}data/${library.overview}`);
+    if (!validOverview(data, library))
+        throw new Error("Invalid header overview");
+    try {
+        const keys = [];
+        for (let index = 0; index < storage.length; index++) {
+            const existing = storage.key(index);
+            if (existing?.startsWith(`${CACHE_PREFIX}overviews/`))
+                keys.push(existing);
+        }
+        while (keys.length >= 8) storage.removeItem(keys.shift());
+        storage.setItem(key, JSON.stringify(data));
+    } catch {
+        /* The current content stays usable without storage. */
+    }
+    return data;
 }
