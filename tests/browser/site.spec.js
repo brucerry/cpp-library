@@ -400,9 +400,12 @@ test("custom dropdown supports keyboard and outside dismissal", async ({
     await trigger.focus();
     await page.keyboard.press("ArrowDown");
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await expect(
+        page.locator("#mode-options [role=option]").first(),
+    ).toHaveText("Available in this version");
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
-    await expect(trigger).toHaveAttribute("data-value", "available");
+    await expect(trigger).toHaveAttribute("data-value", "introduced");
     await expect(trigger).toBeFocused();
     await trigger.click();
     await page.keyboard.press("Escape");

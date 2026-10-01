@@ -1,7 +1,7 @@
 import { icon } from "./ui.js";
 export const modeLabels = {
-    introduced: "New or updated in this version",
     available: "Available in this version",
+    introduced: "New or updated in this version",
 };
 export function modePicker(mode) {
     return `<div class="mode-picker"><span id="mode-label">Show</span><button type="button" id="edition-mode" role="combobox" aria-label="Version matching" aria-expanded="false" aria-controls="mode-options" aria-haspopup="listbox" data-value="${mode}">${modeLabels[mode]}${icon("chevron")}</button><div id="mode-options" role="listbox" aria-label="Version matching" hidden>${Object.entries(
