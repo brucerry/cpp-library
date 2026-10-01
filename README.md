@@ -25,7 +25,7 @@ npm run build         # Generate dist/ for GitHub Pages
 npm run format:check  # Check four-space formatting
 ```
 
-Before the first browser test, run `npx playwright install chromium webkit`. Set `CXX` to a modern compiler path if the default compiler lacks C++23 support. Original and supplemental examples are in `src/catalog.js`, `src/supplemental-examples.js`, and `src/family-examples.js`. Imported C++ snippets are formatted with the four-space `.clang-format` configuration.
+Before the first browser test, run `npx playwright install chromium webkit`. Set `CXX` to a modern compiler path if the default compiler lacks C++23 support. Original and supplemental examples are in `src/catalog.js`, `src/supplemental-examples.js`, `src/family-examples.js`, `src/completion-examples.js`, and `src/header-examples.js`. Imported C++ snippets are formatted with the four-space `.clang-format` configuration.
 
 ---
 
@@ -35,7 +35,7 @@ The importer reads all declaration pages from the latest [English cppreference a
 
 Headers with no standalone declaration pages display their imported macro, type, constant, forward-declaration, or compatibility overview inside the selected library. Overview tables, synopsis code, and explanations load on demand from content-hashed JSON and retain source attribution. The daily sync regenerates these alongside the function reference; feature-macro table rows exclude draft releases and follow the selected edition.
 
-`public/data/coverage.json` records the archive SHA-256, header audit, exclusions, unresolved classifications, and pages missing standalone examples. The header inventory is checked against [N4950, the public C++23 committee draft](https://github.com/cplusplus/draft/blob/n4950/source/lib-intro.tex). **Complete ISO symbol/overload coverage and an example for every function are not yet verified.** Every page includes direct code or a clearly labeled related standalone example from the same type, topic, or header. Related examples retain their own attribution and do not count as examples of the exact API; the audit reports these separately. Imported reference examples retain their published expected or possible output; they are not all compiler-tested locally.
+`public/data/coverage.json` records the archive SHA-256, header audit, exclusions, unresolved classifications, and pages missing standalone examples. The header inventory is checked against [N4950, the public C++23 committee draft](https://github.com/cplusplus/draft/blob/n4950/source/lib-intro.tex). **Complete ISO symbol/overload coverage is not yet verified.** Every imported page now has code for its documented API, through either an upstream example or an original use case. Shared programs exercise the operations in one API family; exposition-only helpers are demonstrated through their public callers and identified as internal. No related-page recommendation substitutes for a missing example. Imported reference examples retain their published expected or possible output; they are not all compiler-tested locally.
 
 `npm run sync` updates the reference content, declarations, examples, and index and checks the [official development status](https://isocpp.org/std/status). Draft editions get a separate status page and official links. If the status website is unavailable, the last verified status and its original check date are retained with a workflow warning. An unrecognized status page stops publication for review. Function details load on demand from content-hashed JSON files. A failed import or validation prevents deployment and leaves the last successful site in place.
 
@@ -56,3 +56,7 @@ In repository **Settings → Pages**, select **GitHub Actions**. A push to `main
 ## Attribution
 
 Application code and original guides/examples use MIT. Imported and adapted reference content is by **cppreference contributors**, under [CC BY-SA 3.0 Unported](https://creativecommons.org/licenses/by-sa/3.0/); each page links to its source. Adaptations include text extraction, navigation, four-space code formatting, and Unicode escape display. That material is not relicensed as MIT. See [REFERENCE-LICENSE.md](REFERENCE-LICENSE.md). DM Sans and Manrope use the SIL Open Font License; notices are in `public/fonts/`. This independent project is not an official ISO or cppreference website.
+
+Header overviews use addressable tabs for overview, facilities, synopsis, examples, notes, and sources. Released-version links preserve the selected header; an unavailable header keeps its context and explains its availability.
+
+The example checker compiles and runs original programs at their stated minimum standard. New optional facilities are checked using feature macros or an overload probe; unavailable implementations are reported as SKIP, separately from PASS. CI also checks the newer facilities with libc++21. Historical APIs use their earlier language mode. libstdc++14.2 generator move assignment is defective (missing return); the probe reports it as unavailable instead of counting a failing runtime as a passing example.

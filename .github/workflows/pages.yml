@@ -38,6 +38,20 @@ jobs:
             - run: npm run test:examples
               env:
                   CXX: g++-14
+            - name: Install LLVM 21 for additional library implementations
+              run: |
+                  sudo mkdir -p /etc/apt/keyrings
+                  curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/llvm.gpg >/dev/null
+                  echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-21 main" | sudo tee /etc/apt/sources.list.d/llvm21.list >/dev/null
+                  sudo apt-get update
+                  sudo apt-get install -y clang-21 libc++-21-dev libc++abi-21-dev
+            - name: Check examples requiring libc++ facilities
+              run: npm run test:examples
+              env:
+                  CXX: clang++-21
+                  CXXFLAGS: -stdlib=libc++
+                  EXAMPLE_REQUIRE_SUPPORT: "1"
+                  EXAMPLE_FILTER: "^completion-(allocator-traits|flat_.*|mdspan|format$|format-queue|format-stack|format-priority_queue|pair-tuple|function-assign)$"
             - run: npm run build
             - uses: actions/upload-pages-artifact@v3
               with:

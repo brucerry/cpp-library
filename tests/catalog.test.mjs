@@ -66,6 +66,7 @@ test("known introductions, removals, and C++03 availability are modeled correctl
         snapshot.entries.some((entry) => entry.name.includes("std::nan")),
     );
     assert.equal(lookup("std::clamp").introduced, "17");
+    assert.equal(lookup("std::at_quick_exit").introduced, "11");
     assert.ok(inEdition(lookup("std::sort"), "03", "available"));
     assert.ok(!inEdition(lookup("std::clamp"), "14", "available"));
     assert.ok(inEdition(lookup("std::clamp"), "17", "introduced"));
@@ -139,51 +140,34 @@ test("departure cleanup only clears keys owned by this project", () => {
     assert.equal(cache.getItem("unrelated"), "preserve");
 });
 
-test("every page has direct code or a traceable related standalone recommendation", async () => {
-    const pages = await Promise.all(
-        snapshot.entries.map(async (entry) =>
-            JSON.parse(await readFile(`public/data/${entry.detail}`, "utf8")),
+test("every imported page has direct code and no related-example fallback", async () => {
+    assert.deepEqual(report.missingExamples, []);
+    assert.equal(report.withRecommendations, 0);
+    assert.equal(report.withExamples, snapshot.entries.length);
+    const { completionFor } = await import("../src/completion-examples.js");
+    let supplemented = 0;
+    for (const entry of snapshot.entries) {
+        const page = JSON.parse(
+            await readFile(`public/data/${entry.detail}`, "utf8"),
+        );
+        assert.ok(page.examples.length || page.guides?.length, page.name);
+        assert.equal(entry.hasExample, true);
+        assert.ok(!page.recommendedExamples?.length, page.name);
+        for (const example of page.examples.filter((item) => item.sampleId)) {
+            supplemented++;
+            const sample = completionFor(page.path);
+            assert.equal(example.sampleId, sample.id, page.name);
+            assert.match(example.code, /\bint\s+main\s*\(/);
+            assert.ok(!example.code.includes("\t"));
+            assert.equal(example.curated, true);
+        }
+    }
+    assert.ok(supplemented > 1000);
+    assert.ok(
+        !snapshot.entries.some(
+            (entry) =>
+                entry.name === "std::tx_exception" ||
+                entry.name.endsWith("::encoding"),
         ),
     );
-    const byId = new Map(pages.map((page) => [page.id, page]));
-    let direct = 0;
-    let related = 0;
-    for (const page of pages) {
-        if (page.examples.length || page.guides?.length) {
-            direct++;
-            assert.ok(!page.recommendedExamples?.length, page.name);
-            continue;
-        }
-        related++;
-        assert.equal(page.recommendedExamples?.length, 1, page.name);
-        const example = page.recommendedExamples[0];
-        const source = byId.get(example.recommendation.id);
-        assert.ok(source, page.name);
-        assert.ok(
-            page.headers.some((header) => source.headers.includes(header)),
-            page.name,
-        );
-        assert.equal(example.recommendation.source, source.source);
-        const unsafe = structuredClone(page);
-        unsafe.recommendedExamples[0].recommendation.source =
-            "javascript:alert(1)";
-        assert.equal(validDetail(unsafe, { id: page.id }), false);
-        assert.match(example.code, /\bint\s+main\s*\(/);
-        assert.ok(!example.code.includes("\t"));
-        assert.ok(
-            [
-                ...source.examples.map((item) => item.code),
-                ...(source.guides || []).map((item) => item.example),
-            ].includes(example.code),
-            page.name,
-        );
-        assert.equal(
-            snapshot.entries.find((entry) => entry.id === page.id).hasExample,
-            false,
-        );
-    }
-    assert.equal(direct, report.withExamples);
-    assert.equal(related, report.withRecommendations);
-    assert.equal(direct + related, snapshot.entries.length);
-    assert.deepEqual(report.withoutAnyExample, []);
 });

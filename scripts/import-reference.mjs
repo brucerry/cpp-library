@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { entries as curated } from "../src/catalog.js";
 import { format } from "@wasm-fmt/clang-format";
 import { supplementalExamples } from "../src/supplemental-examples.js";
+import { completionFor } from "../src/completion-examples.js";
 import { familyExamples } from "../src/family-examples.js";
 import { recommendExamples } from "./recommend-examples.mjs";
 
@@ -140,6 +141,7 @@ const excluded = {
     future: [],
     expositionOnly: [],
     nonLibrary: [],
+    nonReleased: [],
     withoutDeclarations: [],
 };
 const blocks = ($, element) => {
@@ -315,8 +317,20 @@ function resolvePage(page, ancestors = new Set()) {
             .map((header) => libraryByHeader.get(header).introduced)
             .sort((a, b) => year(a) - year(b))[0] || "98";
     const inherited = parent?.introduced || headerVersion;
+    const publicDeclarations = page.declarations.filter(
+        (item) => !/exposition only/.test(item.notes),
+    );
+    const helperVersion =
+        publicDeclarations.length &&
+        publicDeclarations.every((item) => item.since)
+            ? publicDeclarations
+                  .map((item) => item.since)
+                  .sort((a, b) => year(a) - year(b))[0]
+            : inherited;
     for (const declaration of page.declarations)
-        declaration.since ||= inherited;
+        declaration.since ||= /exposition only/.test(declaration.notes)
+            ? helperVersion
+            : inherited;
     page.introduced = page.declarations
         .map((item) => item.since)
         .sort((a, b) => year(a) - year(b))[0];
@@ -424,6 +438,14 @@ for (const example of [...supplementalExamples, ...familyExamples]) {
     }
 }
 for (const page of pages.values()) {
+    if (page.path === "cpp/error/tx_exception.html") {
+        excluded.nonReleased.push(page.path);
+        continue;
+    }
+    if (page.path === "cpp/locale/locale/encoding.html") {
+        excluded.future.push(page.path);
+        continue;
+    }
     if (
         excluded.future.some((path) =>
             page.path.startsWith(path.slice(0, -5) + "/"),
@@ -445,6 +467,23 @@ for (const page of pages.values()) {
             page.intro.split("\n")[0] ||
             `Declarations and requirements for ${page.name}.`;
     included.push(page);
+}
+
+for (const page of included) {
+    if (page.examples.length || page.guides?.length) continue;
+    const example = completionFor(page.path);
+    if (!example) throw new Error(`Missing direct example: ${page.path}`);
+    page.examples.push({
+        code: formatCode(example.example),
+        output: example.output,
+        title: "Practical use case",
+        input: example.input,
+        outputKind: "Assertions",
+        curated: true,
+        minimumStandard: example.minimumVersion || example.version,
+        sampleId: example.id,
+        ...(example.feature ? { requiredFeature: example.feature } : {}),
+    });
 }
 
 const withoutAnyExample = recommendExamples(included);
